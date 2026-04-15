@@ -92,8 +92,12 @@ run_stage(){
 	unmount "${WORK_DIR}/${STAGE}"
 
 	if [ ! -f SKIP_IMAGES ]; then
-		if [ -f "${STAGE_DIR}/EXPORT_IMAGE" ]; then
-			EXPORT_DIRS="${EXPORT_DIRS} ${STAGE_DIR}"
+		if [[ " $SKIP_IMAGES " != *" $STAGE "* ]]; then
+			if [ -f "${STAGE_DIR}/EXPORT_IMAGE" ]; then
+				EXPORT_DIRS="${EXPORT_DIRS} ${STAGE_DIR}"
+			elif [ -f "${STAGE_DIR}/MSRS_EXPORT_IMAGE" ]; then
+				MSRS_EXPORT_DIRS="${MSRS_EXPORT_DIRS} ${STAGE_DIR}"
+			fi
 		fi
 	fi
 	if [ ! -f SKIP ]; then
@@ -314,6 +318,7 @@ log "Begin ${BASE_DIR}"
 
 STAGE_LIST=${STAGE_LIST:-${BASE_DIR}/stage*}
 export STAGE_LIST
+SKIP_IMAGES=${SKIP_IMAGES}
 
 EXPORT_CONFIG_DIR=$(realpath "${EXPORT_CONFIG_DIR:-"${BASE_DIR}/export-image"}")
 if [ ! -d "${EXPORT_CONFIG_DIR}" ]; then
@@ -321,6 +326,13 @@ if [ ! -d "${EXPORT_CONFIG_DIR}" ]; then
 	exit 1
 fi
 export EXPORT_CONFIG_DIR
+
+MSRS_EXPORT_CONFIG_DIR=$(realpath "${MSRS_EXPORT_CONFIG_DIR:-"${BASE_DIR}/msrs-export-image"}")
+if [ ! -d "${MSRS_EXPORT_CONFIG_DIR}" ]; then
+	echo "MSRS_EXPORT_CONFIG_DIR invalid: ${MSRS_EXPORT_CONFIG_DIR} does not exist"
+	exit 1
+fi
+export MSRS_EXPORT_CONFIG_DIR
 
 for STAGE_DIR in $STAGE_LIST; do
 	STAGE_DIR=$(realpath "${STAGE_DIR}")
@@ -332,6 +344,22 @@ for EXPORT_DIR in ${EXPORT_DIRS}; do
 	STAGE_DIR=${EXPORT_CONFIG_DIR}
 	# shellcheck source=/dev/null
 	source "${EXPORT_DIR}/EXPORT_IMAGE"
+	EXPORT_ROOTFS_DIR=${WORK_DIR}/$(basename "${EXPORT_DIR}")/rootfs
+	run_stage
+	if [ "${USE_QEMU}" != "1" ]; then
+		if [ -e "${EXPORT_DIR}/EXPORT_NOOBS" ]; then
+			# shellcheck source=/dev/null
+			source "${EXPORT_DIR}/EXPORT_NOOBS"
+			STAGE_DIR="${BASE_DIR}/export-noobs"
+			run_stage
+		fi
+	fi
+done
+
+for EXPORT_DIR in ${MSRS_EXPORT_DIRS}; do
+	STAGE_DIR=${MSRS_EXPORT_CONFIG_DIR}
+	# shellcheck source=/dev/null
+	source "${EXPORT_DIR}/MSRS_EXPORT_IMAGE"
 	EXPORT_ROOTFS_DIR=${WORK_DIR}/$(basename "${EXPORT_DIR}")/rootfs
 	run_stage
 	if [ "${USE_QEMU}" != "1" ]; then
